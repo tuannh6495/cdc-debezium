@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cdc-system-dev
+  labels:
+    name: cdc-system-dev
+    environment: dev
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cdc-system-staging
+  labels:
+    name: cdc-system-staging
+    environment: staging
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cdc-system-prod
+  labels:
+    name: cdc-system-prod
+    environment: prod
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cdc-monitoring
+  labels:
+    name: cdc-monitoring
+    environment: shared

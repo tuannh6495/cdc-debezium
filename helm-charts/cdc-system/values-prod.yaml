@@ -1,0 +1,52 @@
+environment: "prod"
+
+kafka:
+  replicaCount: 5
+  persistence:
+    size: 500Gi
+  zookeeper:
+    replicaCount: 5
+    persistence:
+      size: 100Gi
+
+kafkaConnect:
+  replicaCount: 3
+  resources:
+    limits:
+      memory: "4Gi"
+      cpu: "2000m"
+    requests:
+      memory: "2Gi"
+      cpu: "1000m"
+
+elasticsearch:
+  master:
+    replicaCount: 3
+  data:
+    replicaCount: 5
+    persistence:
+      size: 1Ti
+
+monitoring:
+  prometheus:
+    server:
+      persistentVolume:
+        size: 100Gi
+
+security:
+  enabled: true
+  networkPolicies:
+    enabled: true
+  podSecurityPolicy:
+    enabled: true
+
+ingress:
+  annotations:
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: cdc-prod.yourdomain.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: kafka-ui

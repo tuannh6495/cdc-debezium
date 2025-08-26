@@ -1,0 +1,33 @@
+environment: "staging"
+
+kafka:
+  replicaCount: 2
+  persistence:
+    size: 50Gi
+  zookeeper:
+    replicaCount: 2
+
+kafkaConnect:
+  replicaCount: 2
+
+elasticsearch:
+  master:
+    replicaCount: 2
+  data:
+    replicaCount: 2
+    persistence:
+      size: 100Gi
+
+monitoring:
+  prometheus:
+    server:
+      persistentVolume:
+        size: 30Gi
+
+ingress:
+  hosts:
+    - host: cdc-staging.yourdomain.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: kafka-ui

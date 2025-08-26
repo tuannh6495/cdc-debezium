@@ -1,0 +1,63 @@
+{{- if and .Values.debezium.enabled .Values.debezium.connectors.postgresql.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cdc-system.fullname" . }}-debezium-postgres
+  labels:
+    {{- include "cdc-system.labels" . | nindent 4 }}
+data:
+  connector.json: |
+    {
+      "name": "postgres-connector",
+      "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "database.hostname": "{{ .Values.debezium.connectors.postgresql.config.database.hostname }}",
+        "database.port": "{{ .Values.debezium.connectors.postgresql.config.database.port }}",
+        "database.user": "{{ .Values.debezium.connectors.postgresql.config.database.user }}",
+        "database.password": "{{ .Values.debezium.connectors.postgresql.config.database.password }}",
+        "database.dbname": "{{ .Values.debezium.connectors.postgresql.config.database.dbname }}",
+        "database.server.name": "{{ .Values.debezium.connectors.postgresql.config.database.server.name }}",
+        "table.include.list": "{{ .Values.debezium.connectors.postgresql.config.table.include.list }}",
+        "plugin.name": "pgoutput",
+        "slot.name": "debezium_slot",
+        "publication.name": "dbz_publication",
+        "topic.prefix": "{{ .Values.environment }}.postgres",
+        "schema.history.internal.kafka.bootstrap.servers": "{{ include "cdc-system.fullname" . }}-kafka:9092",
+        "schema.history.internal.kafka.topic": "schema-changes.{{ .Values.environment }}.postgres",
+        "include.schema.changes": "true",
+        "transforms": "route",
+        "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+        "transforms.route.regex": "([^.]+)\\.([^.]+)\\.([^.]+)",
+        "transforms.route.replacement": "$3"
+      }
+    }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "cdc-system.fullname" . }}-setup-postgres-connector
+  labels:
+    {{- include "cdc-system.labels" . | nindent 4 }}
+spec:
+  template:
+    spec:
+      containers:
+      - name: setup-connector
+        image: curlimages/curl:latest
+        command:
+        - sh
+        - -c
+        - |
+          sleep 60
+          curl -X POST http://{{ include "cdc-system.fullname" . }}-kafka-connect:8083/connectors \
+            -H "Content-Type: application/json" \
+            -d @/config/connector.json
+        volumeMounts:
+        - name: config
+          mountPath: /config
+      volumes:
+      - name: config
+        configMap:
+          name: {{ include "cdc-system.fullname" . }}-debezium-postgres
+      restartPolicy: OnFailure
+{{- end }}

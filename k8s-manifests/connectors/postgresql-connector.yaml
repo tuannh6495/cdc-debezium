@@ -1,0 +1,102 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: setup-postgres-connector
+  namespace: cdc-system-prod
+spec:
+  template:
+    metadata:
+      labels:
+        app: connector-setup
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: setup-connector
+        image: curlimages/curl:latest
+        command:
+        - sh
+        - -c
+        - |
+          # Wait for Kafka Connect to be ready
+          until curl -f http://kafka-connect:8083/connectors; do
+            echo "Waiting for Kafka Connect..."
+            sleep 10
+          done
+          
+          # Create PostgreSQL connector
+          curl -X POST http://kafka-connect:8083/connectors \
+            -H "Content-Type: application/json" \
+            -d '{
+              "name": "postgres-connector-prod",
+              "config": {
+                "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+                "database.hostname": "postgres-primary.database.svc.cluster.local",
+                "database.port": "5432",
+                "database.user": "debezium",
+                "database.password": "prod-super-secret",
+                "database.dbname": "production",
+                "database.server.name": "postgres-prod",
+                "table.include.list": "public.users,public.orders,public.products,public.payments",
+                "plugin.name": "pgoutput",
+                "slot.name": "debezium_prod_slot",
+                "publication.name": "dbz_prod_publication",
+                "topic.prefix": "prod.postgres",
+                "schema.history.internal.kafka.bootstrap.servers": "kafka-0.kafka:9092,kafka-1.kafka:9092,kafka-2.kafka:9092",
+                "schema.history.internal.kafka.topic": "schema-changes.prod.postgres",
+                "include.schema.changes": "true",
+                "snapshot.mode": "initial",
+                "decimal.handling.mode": "string",
+                "time.precision.mode": "adaptive_time_microseconds",
+                "transforms": "route,unwrap",
+                "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+                "transforms.route.regex": "([^.]+)\\.([^.]+)\\.([^.]+)",
+                "transforms.route.replacement": "$3",
+                "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+                "transforms.unwrap.drop.tombstones": "false",
+                "transforms.unwrap.delete.handling.mode": "rewrite"
+              }
+            }'
+          
+          echo "PostgreSQL connector created successfully!"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: setup-mysql-connector
+  namespace: cdc-system-prod
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: setup-connector
+        image: curlimages/curl:latest
+        command:
+        - sh
+        - -c
+        - |
+          until curl -f http://kafka-connect:8083/connectors; do
+            echo "Waiting for Kafka Connect..."
+            sleep 10
+          done
+          
+          curl -X POST http://kafka-connect:8083/connectors \
+            -H "Content-Type: application/json" \
+            -d '{
+              "name": "mysql-connector-prod",
+              "config": {
+                "connector.class": "io.debezium.connector.mysql.MySqlConnector",
+                "database.hostname": "mysql-primary.database.svc.cluster.local",
+                "database.port": "3306",
+                "database.user": "debezium",
+                "database.password": "prod-super-secret",
+                "database.server.name": "mysql-prod",
+                "database.include.list": "inventory,customers,analytics",
+                "table.include.list": "inventory.products,customers.users,analytics.events",
+                "database.history.kafka.bootstrap.servers": "kafka-0.kafka:9092,kafka-1.kafka:9092,kafka-2.kafka:9092",
+                "database.history.kafka.topic": "schema-changes.prod.mysql",
+                "include.schema.changes": "true",
+                "snapshot.mode": "initial",
+                "topic.prefix": "prod.mysql"
+              }
+            }'

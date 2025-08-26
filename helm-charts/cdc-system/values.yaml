@@ -1,0 +1,144 @@
+global:
+  storageClass: "fast-ssd"
+  imageRegistry: "your-registry.com"
+  
+environment: "dev"
+
+# Kafka Configuration
+kafka:
+  enabled: true
+  replicaCount: 3
+  persistence:
+    enabled: true
+    size: 100Gi
+  zookeeper:
+    persistence:
+      enabled: true
+      size: 20Gi
+  metrics:
+    kafka:
+      enabled: true
+    jmx:
+      enabled: true
+
+# Kafka Connect Configuration
+kafkaConnect:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: confluentinc/cp-kafka-connect
+    tag: 7.5.0
+  resources:
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+  config:
+    group.id: "cdc-connect-cluster"
+    offset.storage.topic: "connect-offsets"
+    config.storage.topic: "connect-configs"
+    status.storage.topic: "connect-status"
+
+# Debezium Configuration
+debezium:
+  enabled: true
+  connectors:
+    postgresql:
+      enabled: true
+      config:
+        database.hostname: "postgresql.database.svc.cluster.local"
+        database.port: 5432
+        database.user: "debezium"
+        database.password: "debezium-secret"
+        database.dbname: "production"
+        database.server.name: "pg-server"
+        table.include.list: "public.users,public.orders,public.products"
+    mysql:
+      enabled: false
+    mongodb:
+      enabled: false
+
+# Schema Registry
+schemaRegistry:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: confluentinc/cp-schema-registry
+    tag: 7.5.0
+
+# Kafka Streams Apps
+kafkaStreams:
+  enabled: true
+  apps:
+    userProcessor:
+      enabled: true
+      replicaCount: 2
+      image:
+        repository: your-registry.com/user-processor
+        tag: latest
+    orderProcessor:
+      enabled: true
+      replicaCount: 2
+
+# Target Systems
+elasticsearch:
+  enabled: true
+  master:
+    replicaCount: 3
+  data:
+    replicaCount: 3
+    persistence:
+      size: 200Gi
+
+redis:
+  enabled: true
+  architecture: cluster
+  redis:
+    replicaCount: 6
+
+# Monitoring
+monitoring:
+  prometheus:
+    enabled: true
+    server:
+      persistentVolume:
+        size: 50Gi
+  grafana:
+    enabled: true
+    persistence:
+      enabled: true
+      size: 10Gi
+  kafkaExporter:
+    enabled: true
+  jmxExporter:
+    enabled: true
+
+# Ingress
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: cdc-kafka-ui.yourdomain.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: kafka-ui
+    - host: cdc-grafana.yourdomain.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: grafana
+
+# Security
+security:
+  enabled: true
+  networkPolicies:
+    enabled: true
+  podSecurityPolicy:
+    enabled: true
+  rbac:
+    enabled: true

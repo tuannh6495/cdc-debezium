@@ -1,0 +1,42 @@
+environment: "dev"
+
+kafka:
+  replicaCount: 1
+  persistence:
+    size: 20Gi
+  zookeeper:
+    replicaCount: 1
+    persistence:
+      size: 5Gi
+
+kafkaConnect:
+  replicaCount: 1
+  resources:
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+
+elasticsearch:
+  master:
+    replicaCount: 1
+  data:
+    replicaCount: 1
+    persistence:
+      size: 50Gi
+
+monitoring:
+  prometheus:
+    server:
+      persistentVolume:
+        size: 20Gi
+
+ingress:
+  hosts:
+    - host: cdc-dev.yourdomain.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: kafka-ui

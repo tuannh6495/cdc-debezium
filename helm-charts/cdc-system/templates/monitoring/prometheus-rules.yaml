@@ -1,0 +1,38 @@
+{{- if .Values.monitoring.prometheus.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "cdc-system.fullname" . }}-kafka-rules
+  labels:
+    {{- include "cdc-system.labels" . | nindent 4 }}
+spec:
+  groups:
+  - name: kafka.rules
+    rules:
+    - alert: KafkaConsumerLag
+      expr: kafka_consumer_lag_sum > 1000
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Kafka consumer lag is high"
+        description: "Consumer {{ $labels.consumergroup }} has lag of {{ $value }} messages"
+    
+    - alert: KafkaConnectDown
+      expr: up{job="kafka-connect"} == 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Kafka Connect is down"
+        description: "Kafka Connect instance {{ $labels.instance }} is down"
+    
+    - alert: DebeziumConnectorFailed
+      expr: kafka_connect_connector_status{state!="RUNNING"} == 1
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Debezium connector failed"
+        description: "Connector {{ $labels.connector }} is in {{ $labels.state }} state"
+{{- end }}

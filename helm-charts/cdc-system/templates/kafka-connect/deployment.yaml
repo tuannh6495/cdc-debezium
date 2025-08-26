@@ -1,0 +1,80 @@
+{{- if .Values.kafkaConnect.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cdc-system.fullname" . }}-kafka-connect
+  labels:
+    {{- include "cdc-system.labels" . | nindent 4 }}
+    component: kafka-connect
+spec:
+  replicas: {{ .Values.kafkaConnect.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "cdc-system.selectorLabels" . | nindent 6 }}
+      component: kafka-connect
+  template:
+    metadata:
+      labels:
+        {{- include "cdc-system.selectorLabels" . | nindent 8 }}
+        component: kafka-connect
+    spec:
+      containers:
+      - name: kafka-connect
+        image: "{{ .Values.kafkaConnect.image.repository }}:{{ .Values.kafkaConnect.image.tag }}"
+        ports:
+        - containerPort: 8083
+          name: rest-api
+        - containerPort: 9999
+          name: jmx
+        env:
+        - name: CONNECT_BOOTSTRAP_SERVERS
+          value: "{{ include "cdc-system.fullname" . }}-kafka:9092"
+        - name: CONNECT_GROUP_ID
+          value: "{{ .Values.kafkaConnect.config.group.id }}"
+        - name: CONNECT_CONFIG_STORAGE_TOPIC
+          value: "{{ .Values.kafkaConnect.config.config.storage.topic }}"
+        - name: CONNECT_OFFSET_STORAGE_TOPIC
+          value: "{{ .Values.kafkaConnect.config.offset.storage.topic }}"
+        - name: CONNECT_STATUS_STORAGE_TOPIC
+          value: "{{ .Values.kafkaConnect.config.status.storage.topic }}"
+        - name: CONNECT_KEY_CONVERTER
+          value: "org.apache.kafka.connect.json.JsonConverter"
+        - name: CONNECT_VALUE_CONVERTER
+          value: "org.apache.kafka.connect.json.JsonConverter"
+        - name: CONNECT_REST_ADVERTISED_HOST_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        resources:
+          {{- toYaml .Values.kafkaConnect.resources | nindent 10 }}
+        volumeMounts:
+        - name: plugins
+          mountPath: /usr/share/java/kafka-connect-jdbc
+        livenessProbe:
+          httpGet:
+            path: /
+            port: rest-api
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /connectors
+            port: rest-api
+          initialDelaySeconds: 30
+          periodSeconds: 10
+      volumes:
+      - name: plugins
+        emptyDir: {}
+      initContainers:
+      - name: download-plugins
+        image: curlimages/curl:latest
+        command:
+        - sh
+        - -c
+        - |
+          curl -L https://repo1.maven.org/maven2/io/debezium/debezium-connector-postgres/2.4.0.Final/debezium-connector-postgres-2.4.0.Final-plugin.tar.gz | tar -xz -C /plugins
+          curl -L https://repo1.maven.org/maven2/io/debezium/debezium-connector-mysql/2.4.0.Final/debezium-connector-mysql-2.4.0.Final-plugin.tar.gz | tar -xz -C /plugins
+        volumeMounts:
+        - name: plugins
+          mountPath: /plugins
+{{- end }}

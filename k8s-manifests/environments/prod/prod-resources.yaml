@@ -1,0 +1,154 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-connect-config
+  namespace: cdc-system-prod
+data:
+  connect-distributed.properties: |
+    bootstrap.servers=kafka-0.kafka:9092,kafka-1.kafka:9092,kafka-2.kafka:9092
+    group.id=connect-cluster-prod
+    key.converter=org.apache.kafka.connect.json.JsonConverter
+    value.converter=org.apache.kafka.connect.json.JsonConverter
+    key.converter.schemas.enable=false
+    value.converter.schemas.enable=false
+    offset.storage.topic=connect-offsets-prod
+    offset.storage.replication.factor=3
+    config.storage.topic=connect-configs-prod
+    config.storage.replication.factor=3
+    status.storage.topic=connect-status-prod
+    status.storage.replication.factor=3
+    offset.flush.interval.ms=5000
+    plugin.path=/usr/share/java,/usr/share/confluent-hub-components
+    # Security configurations
+    security.protocol=SASL_SSL
+    sasl.mechanism=PLAIN
+    sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="${KAFKA_USERNAME}" password="${KAFKA_PASSWORD}";
+    ssl.truststore.location=/etc/kafka/secrets/kafka.truststore.jks
+    ssl.truststore.password=${TRUSTSTORE_PASSWORD}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: cdc-system-prod
+spec:
+  serviceName: kafka
+  replicas: 3
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - kafka
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - name: kafka
+        image: confluentinc/cp-kafka:7.5.0
+        ports:
+        - containerPort: 9092
+        - containerPort: 9093
+        env:
+        - name: KAFKA_BROKER_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.annotations['kafka.io/broker-id']
+        - name: KAFKA_ZOOKEEPER_CONNECT
+          value: "zookeeper-0.zookeeper:2181,zookeeper-1.zookeeper:2181,zookeeper-2.zookeeper:2181"
+        - name: KAFKA_LISTENERS
+          value: "PLAINTEXT://0.0.0.0:9092,SSL://0.0.0.0:9093"
+        - name: KAFKA_ADVERTISED_LISTENERS
+          value: "PLAINTEXT://$(hostname).kafka:9092,SSL://$(hostname).kafka:9093"
+        - name: KAFKA_SECURITY_INTER_BROKER_PROTOCOL
+          value: "SSL"
+        - name: KAFKA_SSL_KEYSTORE_FILENAME
+          value: "kafka.keystore.jks"
+        - name: KAFKA_SSL_KEYSTORE_CREDENTIALS
+          value: "keystore_creds"
+        - name: KAFKA_SSL_KEY_CREDENTIALS
+          value: "key_creds"
+        - name: KAFKA_SSL_TRUSTSTORE_FILENAME
+          value: "kafka.truststore.jks"
+        - name: KAFKA_SSL_TRUSTSTORE_CREDENTIALS
+          value: "truststore_creds"
+        - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+          value: "3"
+        - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+          value: "3"
+        - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+          value: "2"
+        - name: KAFKA_DEFAULT_REPLICATION_FACTOR
+          value: "3"
+        - name: KAFKA_MIN_IN_SYNC_REPLICAS
+          value: "2"
+        - name: KAFKA_NUM_PARTITIONS
+          value: "12"
+        - name: KAFKA_JMX_PORT
+          value: "9999"
+        - name: KAFKA_JMX_HOSTNAME
+          value: "localhost"
+        volumeMounts:
+        - name: kafka-data
+          mountPath: /var/lib/kafka/data
+        - name: kafka-secrets
+          mountPath: /etc/kafka/secrets
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "1000m"
+          limits:
+            memory: "8Gi"
+            cpu: "2000m"
+        livenessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        readinessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+      volumes:
+      - name: kafka-secrets
+        secret:
+          secretName: kafka-ssl-credentials
+  volumeClaimTemplates:
+  - metadata:
+      name: kafka-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: kafka-storage
+      resources:
+        requests:
+          storage: 500Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: cdc-system-prod
+spec:
+  selector:
+    app: kafka
+  ports:
+  - name: plaintext
+    port: 9092
+    targetPort: 9092
+  - name: ssl
+    port: 9093
+    targetPort: 9093
+  - name: jmx
+    port: 9999
+    targetPort: 9999
+  clusterIP: None
